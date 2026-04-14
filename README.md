@@ -7,7 +7,7 @@ terminal1: `uv run consumer.py` \
 terminal2: `uv run producer.py`
 
 ### kafka CLI
-https://docs.confluent.io/kafka/operations-tool /kafka-tools.html#ak-command-line-interface-cli-tools
+https://docs.confluent.io/kafka/operations-tool/kafka-tools.html#ak-command-line-interface-cli-tools
 
 `docker compose exec kafka bash` \
 `/opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092` \
