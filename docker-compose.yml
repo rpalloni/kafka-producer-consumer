@@ -1,0 +1,61 @@
+services:
+
+  kafka:
+    container_name: kafka
+    image: apache/kafka:4.2.0
+    ports:
+      - "9092:9092" # internal clients
+      - "9093:9093" # external clients
+
+    environment:
+      CLUSTER_ID: 'prod-cons-cluster-xyzjw'
+      KAFKA_NODE_ID: 1 # one broker
+      KAFKA_BROKER_ID: 1
+      KAFKA_KRAFT_MODE: 'true' # no more zookeeper to manage brokers
+
+      KAFKA_PROCESS_ROLES: broker, controller # the single node will act as broker (store and serve data) and controller (cluster coordination)
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9094 # the node with controller role (might be a list: 2@kafka:9093)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1 # kafka metadata copies - metadata tracks which messages each consumer has read from which topic (default: 3, 1 no backup)
+      KAFKA_NUM_PARTITIONS: 1 # set default number of partitions
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1 # as there is only one broker
+
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:9092, EXTERNAL://0.0.0.0:9093, CONTROLLER://0.0.0.0:9094 # open ports for traffic: one endpoint for internal prod and cons to r/w, one for external, one for controller comms (node-to-node comms)
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9093 # kafka endpoint for clients (prod and cons) inside Docker have to connect (kafka-init) / localhost endpoint for clients (producer.py and consumer.py) outside Docker have to connect
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER # endpoint where controllers have to connect for controller-to-controller talk and voting
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL # custom listener name for prod and cons inside Docker
+      # PLAINTEXT is Kafka's default security protocol for unencrypted, unauthenticated network communication between clients and brokers
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT # map security protocol PLAINTEXT to listeners
+      
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs # where to store data files, broker logs, controller metadata
+      KAFKA_LOG4J_ROOT_LOGLEVEL: WARN # set logger level to WARN
+    
+    healthcheck:
+      # test container OWN (localhost) port 9092: only waits for the port to open but doesn't guarantee the Kafka cluster is fully ready!
+      # test: sh -c "nc -z localhost 9092 || exit 1"
+
+      # tests if the Kafka broker is fully ready by querying its supported API versions, then discards all output
+      test: sh -c "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1 || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s # Kafka broker takes 20-60 seconds to fully initialize (KRAFT cluster formation, controller election, etc)
+
+    volumes:
+     - kafka_data:/var/lib/kafka/data # persist container kafka data
+
+
+  kafka-init:
+    # create a topic in the broker after is healty and shut down
+    image: apache/kafka:4.1.0
+    container_name: kafka-init
+    environment:
+      KAFKA_LOG4J_ROOT_LOGLEVEL: ERROR
+    depends_on:
+      kafka:
+        condition: service_healthy 
+    command: sh -c "/opt/kafka/bin/kafka-topics.sh --create --topic test-topic --partitions 10 --replication-factor 1 --bootstrap-server kafka:9092 && exit 0"
+
+volumes:
+  kafka_data:
+
+
