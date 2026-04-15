@@ -46,7 +46,7 @@ services:
 
   kafka-init:
     # create a topic in the broker after is healty and shut down
-    image: apache/kafka:4.1.0
+    image: apache/kafka:4.2.0
     container_name: kafka-init
     environment:
       KAFKA_LOG4J_ROOT_LOGLEVEL: ERROR
